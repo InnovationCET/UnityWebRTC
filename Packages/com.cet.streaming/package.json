@@ -1,0 +1,14 @@
+{
+  "name": "com.cet.streaming",
+  "version": "1.0.0",
+  "displayName": "WebRTC streaming made easy",
+  "unity": "2020.3",
+  "dependencies": {
+    "com.unity.webrtc": "2.4.0-exp.6"
+  },
+  "author": {
+    "name": "Recet",
+    "email": "",
+    "url": ""
+  }
+}
