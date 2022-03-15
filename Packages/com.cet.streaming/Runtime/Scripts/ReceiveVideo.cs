@@ -42,7 +42,6 @@ public class ReceiveVideo : MonoBehaviour
     {
       if (task.Status == TaskStatus.RanToCompletion)
       {
-
         this.channel = task.Result;
         Log("Call was answered; signal channel established");
         work.Enqueue(BuildPeerConnection);
