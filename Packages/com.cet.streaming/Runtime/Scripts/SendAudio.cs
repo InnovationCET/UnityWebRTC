@@ -16,6 +16,9 @@ public class SendAudio : MonoBehaviour
   [Tooltip("Can leave empty")]
   [SerializeField] private string localId;
 
+  public bool dataChannelOpen { get; private set; }
+  public event Action<byte[]> OnMessage; // will be sent the bytes received, or null on close
+
   public string remoteId;
   public string SignalServerHttpAddress = "http://20.86.157.60:3000/";
 
@@ -48,10 +51,10 @@ public class SendAudio : MonoBehaviour
     }
   }
 
-  // private void Start()
-  // {
-  //   ListMicrophones();
-  // }
+  private void Start()
+  {
+    ListMicrophones();
+  }
 
   void ListMicrophones()
   {
@@ -96,7 +99,7 @@ public class SendAudio : MonoBehaviour
     pc = new RTCPeerConnection(ref configuration)
     {
       OnIceCandidate = candidate => channel.send(new Request(candidate)),
-      OnDataChannel = data_channel => Log("The peer has created a data channel"),
+      //OnDataChannel = data_channel => Log("The peer has created a data channel"),
       OnNegotiationNeeded = () => StartCoroutine(PeerNegotiationNeeded(pc)),
       OnIceGatheringStateChange = state => Log("Ice gathering state " + state),
       OnIceConnectionChange = state => Log("Ice connection change " + state),
@@ -115,17 +118,16 @@ public class SendAudio : MonoBehaviour
       },
     };
 
-    var option = new RTCDataChannelInit();
-    my_data_channel = pc.CreateDataChannel("channel 1", option);
-    my_data_channel.OnOpen = () =>
+    my_data_channel = pc.CreateDataChannel("channel 1");
+    my_data_channel.OnOpen = () => dataChannelOpen = true;
+    my_data_channel.OnClose = () =>
     {
-      Log("We can now send and receive messages");
-      // to send message: my_data_channel.Send(string) or my_data_channel.Send(byte[])
+      dataChannelOpen = false;
+      OnMessage?.Invoke(null);
+      OnMessage = null;
     };
-    my_data_channel.OnMessage = bytes =>
-    {
-      Log("Received message from peer");
-    };
+    my_data_channel.OnMessage = bytes => OnMessage?.Invoke(bytes);
+    // to send message: my_data_channel.Send(string) or my_data_channel.Send(byte[])
 
     audioTrack = new AudioStreamTrack(inputAudioSource);
     pc.AddTrack(audioTrack, sendStream);
@@ -134,6 +136,16 @@ public class SendAudio : MonoBehaviour
     var error = transceiver.SetCodecPreferences(this.availableCodecs.ToArray());
     if (error != RTCErrorType.None)
       Debug.LogError(error);
+  }
+
+  public void Send(byte[] buffer)
+  {
+    my_data_channel?.Send(buffer);
+  }
+
+  public void Send(string text)
+  {
+    my_data_channel?.Send(text);
   }
 
   [ContextMenu("Pause")]
@@ -162,6 +174,8 @@ public class SendAudio : MonoBehaviour
     audioTrack?.Dispose();
     sendStream?.Dispose();
     my_data_channel?.Dispose();
+    dataChannelOpen = false;
+    OnMessage = null;
     pc?.Dispose();
     pc = null;
     my_data_channel = null;

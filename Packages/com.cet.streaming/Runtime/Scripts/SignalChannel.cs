@@ -71,7 +71,7 @@ class SignalChannel
 
     if (reply != null && reply.type == "ok")
     {
-      return new SignalChannel(local_channel, reply.switch_channel ?? reply.from);
+      return new SignalChannel(local_channel, reply.switch_channel ?? reply.from, token);
     }
     throw new Exception("Remote refused to answer the call");
   }

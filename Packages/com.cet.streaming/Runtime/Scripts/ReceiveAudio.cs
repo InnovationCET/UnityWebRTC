@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,6 +17,9 @@ public class ReceiveAudio : MonoBehaviour
   public string LogTag = "RecvAudio";
   public string localId;
   public string SignalServerHttpAddress = "http://20.86.157.60:3000/";
+
+  public bool dataChannelOpen { get; private set; }
+  public event Action<byte[]> OnMessage; // will be sent the bytes received, or null on close
 
   private RTCPeerConnection pc;
   private RTCDataChannel my_data_channel;
@@ -65,6 +69,7 @@ public class ReceiveAudio : MonoBehaviour
       call_alive = true;
       while (call_alive && !listen_cts.IsCancellationRequested)
         Thread.Sleep(1000);
+      channel_cts.Cancel();
     }
   }
 
@@ -113,17 +118,24 @@ public class ReceiveAudio : MonoBehaviour
         {
           OnHangUp();
         }
+        else if (state == RTCPeerConnectionState.Connected)
+          channel_cts.Cancel(); // no need to listen to the signalling channel anymore
+      },
+      OnDataChannel = data_channel =>
+      {
+        Log("The peer has created a data channel");
+        my_data_channel = data_channel;
+        my_data_channel.OnOpen = () => dataChannelOpen = true;
+        my_data_channel.OnClose = () =>
+        {
+          dataChannelOpen = false;
+          OnMessage?.Invoke(null);
+          OnMessage = null;
+        };
+        my_data_channel.OnMessage = bytes => OnMessage?.Invoke(bytes);
       }
     };
-    my_data_channel = pc.CreateDataChannel("data 2", new RTCDataChannelInit());
-    my_data_channel.OnOpen += () =>
-    {
-      Log("Data channel opened to peer");
-    };
-    my_data_channel.OnMessage += bytes =>
-    {
-      // received data from peer
-    };
+
     var transceiver = pc.AddTransceiver(TrackKind.Audio);
     transceiver.Direction = RTCRtpTransceiverDirection.RecvOnly;
     StartCoroutine(OnReceivedOffer(desc));
@@ -160,6 +172,8 @@ public class ReceiveAudio : MonoBehaviour
     pc?.Dispose();
     pc = null;
     my_data_channel = null;
+    dataChannelOpen = false;
+    OnMessage = null;
     receiveStream = null;
     audioTrack = null;
     call_alive = false;
