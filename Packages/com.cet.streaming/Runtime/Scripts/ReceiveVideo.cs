@@ -15,7 +15,6 @@ public class ReceiveVideo : MonoBehaviour
   [SerializeField] private RawImage outputVideo;
   public string localId;
   public string remoteId;
-  public string SignalServerHttpAddress = "http://20.86.157.60:3000/";
 
   private RTCPeerConnection pc;
   private MediaStream receiveStream;
@@ -33,8 +32,9 @@ public class ReceiveVideo : MonoBehaviour
   [ContextMenu("Call")]
   public void Call()
   {
-    SignalChannel.InitIfNeeded(SignalServerHttpAddress);
+    SignalChannel.InitIfNeeded(WebRtcMain.Instance.HttpServerAddress);
     WebRtcMain.Instance.InitIfNeeded();
+    localId ??= System.Net.Dns.GetHostName();
 
     cts = new CancellationTokenSource();
     SignalChannel.Call(remoteId, localId, cts.Token)

@@ -11,7 +11,6 @@ public class PublishPackage : EditorWindow
   string targetFolder;
 
   PackRequest req;
-  string packagePath;
 
   [MenuItem("Tools/Publish package")]
   public static void Open()
@@ -19,19 +18,24 @@ public class PublishPackage : EditorWindow
     EditorWindow.GetWindow<PublishPackage>().Show();
   }
 
+  private void OnEnable()
+  {
+    targetFolder = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+  }
+
   private void OnGUI()
   {
     GUI.enabled = req == null || req.IsCompleted;
 
-    var newpackageFolder = EditorGUILayout.TextField("Package folder (relative to project packages):", packageFolder);
+    packageFolder = EditorGUILayout.DelayedTextField("Package folder (relative to project packages):", packageFolder);
     targetFolder = EditorGUILayout.TextField("Target folder (absolute):", targetFolder);
-    if (newpackageFolder != packageFolder)
-    {
-      packageFolder = newpackageFolder;
-      packagePath = Path.Combine(Application.dataPath, "../Packages", packageFolder);
-    }
+
+    if (GUILayout.Button("Find package folder..."))
+      packageFolder = Path.GetFileName(EditorUtility.OpenFolderPanel("Choose package", Path.Combine(Application.dataPath, "../Packages"), ""));
+      
     if (GUILayout.Button("Make package"))
     {
+      var packagePath = Path.Combine(Application.dataPath, "../Packages", packageFolder);
       req = UnityEditor.PackageManager.Client.Pack(packagePath, targetFolder);
     }
     if (req != null)

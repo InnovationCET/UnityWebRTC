@@ -36,11 +36,11 @@ public class DisplayVideoFromFronty : MonoBehaviour
   {
     byte[] image = null;
     // pump all previous images out of the queue; we want just the last one
-    while (images.TryDequeue(out image))
+    while (images.TryDequeue(out var newimage))
     {
-      /* empty loop body on purpose */
+      image = newimage;
     }
-      
+
     if (image != null && screen != null)
     {
       if (ImageConversion.LoadImage(texture, image))

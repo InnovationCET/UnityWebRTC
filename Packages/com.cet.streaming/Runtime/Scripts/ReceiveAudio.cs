@@ -16,10 +16,9 @@ public class ReceiveAudio : MonoBehaviour
   [SerializeField] private AudioSource outputAudioSource;
   public string LogTag = "RecvAudio";
   public string localId;
-  public string SignalServerHttpAddress = "http://20.86.157.60:3000/";
 
   public bool dataChannelOpen { get; private set; }
-  public event Action<byte[]> OnMessage; // will be sent the bytes received, or null on close
+  public event DelegateOnMessage OnMessage; // will be sent the bytes received, or null on close
 
   private RTCPeerConnection pc;
   private RTCDataChannel my_data_channel;
@@ -33,9 +32,11 @@ public class ReceiveAudio : MonoBehaviour
 
   void Start()
   {
-    SignalChannel.InitIfNeeded(SignalServerHttpAddress);
+    SignalChannel.InitIfNeeded(WebRtcMain.Instance.HttpServerAddress);
     WebRtcMain.Instance.InitIfNeeded();
     LogTag = (string.IsNullOrWhiteSpace(LogTag) ? this.GetType().Name : LogTag.Trim()) + ": ";
+    localId ??= System.Net.Dns.GetHostName();
+
     var codecs = RTCRtpSender.GetCapabilities(TrackKind.Audio).codecs;
     var excludeCodecTypes = new[] { "audio/CN", "audio/telephone-event" };
     foreach (var codec in codecs)
@@ -45,7 +46,10 @@ public class ReceiveAudio : MonoBehaviour
       availableCodecs.Add(codec);
     }
     listen_cts = new CancellationTokenSource();
-    Task.Run(ListenAndAccept);
+    Task.Run(ListenAndAccept).ContinueWith(task =>
+    {
+      Debug.LogError(task.Exception.InnerException);
+    }, TaskContinuationOptions.OnlyOnFaulted);
   }
 
   private void OnDestroy()
@@ -57,6 +61,8 @@ public class ReceiveAudio : MonoBehaviour
 
   void ListenAndAccept()
   {
+    if (string.IsNullOrWhiteSpace(localId))
+      throw new ArgumentException("localId can't be null or empty");
     while (!listen_cts.IsCancellationRequested)
     {
       var listener = SignalChannel.Listen(localId, listen_cts.Token);
@@ -139,6 +145,16 @@ public class ReceiveAudio : MonoBehaviour
     var transceiver = pc.AddTransceiver(TrackKind.Audio);
     transceiver.Direction = RTCRtpTransceiverDirection.RecvOnly;
     StartCoroutine(OnReceivedOffer(desc));
+  }
+
+  public void Send(byte[] buffer)
+  {
+    my_data_channel?.Send(buffer);
+  }
+
+  public void Send(string text)
+  {
+    my_data_channel?.Send(text);
   }
 
   public void OnPause()

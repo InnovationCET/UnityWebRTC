@@ -17,10 +17,9 @@ public class SendAudio : MonoBehaviour
   [SerializeField] private string localId;
 
   public bool dataChannelOpen { get; private set; }
-  public event Action<byte[]> OnMessage; // will be sent the bytes received, or null on close
+  public event DelegateOnMessage OnMessage; // will be sent the bytes received, or null on close
 
   public string remoteId;
-  public string SignalServerHttpAddress = "http://20.86.157.60:3000/";
 
   private RTCPeerConnection pc;
   private MediaStream sendStream;
@@ -37,9 +36,10 @@ public class SendAudio : MonoBehaviour
 
   void Init()
   {
-    SignalChannel.InitIfNeeded(SignalServerHttpAddress);
+    SignalChannel.InitIfNeeded(WebRtcMain.Instance.HttpServerAddress);
     WebRtcMain.Instance.InitIfNeeded();
     LogTag = (string.IsNullOrWhiteSpace(LogTag) ? this.GetType().Name : LogTag.Trim()) + ": ";
+    localId ??= System.Net.Dns.GetHostName();
 
     var codecs = RTCRtpSender.GetCapabilities(TrackKind.Audio).codecs;
     var excludeCodecTypes = new[] { "audio/CN", "audio/telephone-event" };
@@ -66,6 +66,12 @@ public class SendAudio : MonoBehaviour
   private void StartCall()
   {
     Init();
+    if (string.IsNullOrEmpty(remoteId))
+      throw new ArgumentNullException(nameof(remoteId));
+
+    if (string.IsNullOrEmpty(localId))
+      throw new ArgumentNullException(nameof(localId));
+
     if (cts != null)
       cts.Cancel();
     cts = new CancellationTokenSource();
