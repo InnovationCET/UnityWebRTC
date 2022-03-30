@@ -117,9 +117,7 @@ public class SendAudio : MonoBehaviour
           cts.Cancel(); // no need for signal channel anymore
           cts = null;
         }
-        if (state == RTCPeerConnectionState.Failed ||
-            state == RTCPeerConnectionState.Closed ||
-            state == RTCPeerConnectionState.Disconnected)
+        if (state == RTCPeerConnectionState.Failed)
           OnHangup();
       },
     };

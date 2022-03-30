@@ -33,9 +33,11 @@ public class VideoAudioReceiver : BaseForRtcConnection
     if (string.IsNullOrEmpty(localId))
       localId = System.Net.Dns.GetHostName();
 
-    while (pc != null && !PcFailedState)
-      yield return null;
-    Hangup(); // hang up previous first
+    while (pc != null && pc.ConnectionState != RTCPeerConnectionState.Closed)
+    {
+      Log("Previous connection is still alive");
+      yield break;
+    }
 
     var local = localId + "_" + Guid.NewGuid().ToString();
     bool first = true;
@@ -58,23 +60,18 @@ public class VideoAudioReceiver : BaseForRtcConnection
       new_remoteId = www.answer.switch_channel;
     }
 
-    if(pc!=null)
+    if (pc != null)
       yield break;
     // at this point we have a remote that's ready to talk to us
     Log("Switched channel to " + new_remoteId);
     BuildPeerConnection(new_remoteId);
-    if (keepAlive)
-      pc.OnConnectionStateChange += newstate =>
-      {
-        switch (newstate)
-        {
-          case RTCPeerConnectionState.Closed:
-          case RTCPeerConnectionState.Disconnected:
-          case RTCPeerConnectionState.Failed:
-            StartCoroutine(InitiateConnection());
-            break;
-        }
-      };
+    pc.OnConnectionStateChange += newstate =>
+    {
+      if (newstate == RTCPeerConnectionState.Closed && keepAlive)
+        StartCoroutine(InitiateConnection());
+      if (newstate == RTCPeerConnectionState.Failed)
+        Hangup();
+    };
     while (www.IsOk && pc.ConnectionState != RTCPeerConnectionState.Connected)
     {
       yield return (www = new get(local));

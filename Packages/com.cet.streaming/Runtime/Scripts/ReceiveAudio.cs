@@ -109,9 +109,7 @@ public class ReceiveAudio : MonoBehaviour
       OnConnectionStateChange = state =>
       {
         Log("Connection state " + state);
-        if (state == RTCPeerConnectionState.Failed ||
-            state == RTCPeerConnectionState.Disconnected ||
-            state == RTCPeerConnectionState.Closed)
+        if (state == RTCPeerConnectionState.Failed)
         {
           OnHangUp();
         }

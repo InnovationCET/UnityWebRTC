@@ -130,21 +130,13 @@ public class SendAudio2 : BaseForRtcConnection
         pc.AddIceCandidate((RTCIceCandidate)www.answer);
       }
     }
-    if (keepAlive)
-      pc.OnConnectionStateChange += newstate =>
-      {
-        Log("----------------------- " + newstate);
-        switch (newstate)
-        {
-          case RTCPeerConnectionState.Disconnected:
-          case RTCPeerConnectionState.Closed:
-          case RTCPeerConnectionState.Failed:
-            StartCoroutine(InitiateConnection());
-            break;
-          default:
-            break;
-        }
-      };
+    pc.OnConnectionStateChange += newstate =>
+    {
+      if (newstate == RTCPeerConnectionState.Closed && keepAlive)
+        StartCoroutine(InitiateConnection());
+      if (newstate == RTCPeerConnectionState.Failed)
+        Hangup();
+    };
   }
 
   protected override void OnAddTrack(MediaStreamTrackEvent e)

@@ -104,6 +104,11 @@ public class ReceiveAudio2 : BaseForRtcConnection
   protected override void BuildPeerConnection(string remote)
   {
     pc = BuildBasicPeerConnection(remote);
+    pc.OnConnectionStateChange += newstate =>
+      {
+        if (newstate == RTCPeerConnectionState.Failed)
+          Hangup();
+      };
     var transceiver = pc.AddTransceiver(TrackKind.Audio);
     transceiver.Direction = RTCRtpTransceiverDirection.RecvOnly;
   }

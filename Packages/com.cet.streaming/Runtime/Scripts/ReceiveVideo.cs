@@ -136,9 +136,7 @@ public class ReceiveVideo : MonoBehaviour
       OnConnectionStateChange = state =>
       {
         Log("Connection state change " + state);
-        if (state == RTCPeerConnectionState.Failed ||
-            state == RTCPeerConnectionState.Closed ||
-            state == RTCPeerConnectionState.Disconnected)
+        if (state == RTCPeerConnectionState.Closed)
           OnHangup();
       },
     };

@@ -89,12 +89,6 @@ public abstract class BaseForRtcConnection : MonoBehaviour
       OnConnectionStateChange = state =>
       {
         Log("Connection state change " + state);
-        if (state == RTCPeerConnectionState.Failed ||
-            state == RTCPeerConnectionState.Closed ||
-            state == RTCPeerConnectionState.Disconnected)
-        {
-          Hangup();
-        }
       },
       OnDataChannel = SetupDataChannel
     };
