@@ -16,6 +16,7 @@ class SignalChannel
   public string remote_mailbox { get; private set; }
   private readonly CancellationToken token;
   private readonly ConcurrentQueue<Request> incoming;
+  private bool alive;
 
   public static void InitIfNeeded(string server_base_address, int timeout_ms = 3000)
   {
@@ -82,14 +83,20 @@ class SignalChannel
     this.remote_mailbox = remote;
     this.token = token;
     this.incoming = new ConcurrentQueue<Request>();
+    this.alive = true;
     Task.Run(poll);
+  }
+
+  internal void Close()
+  {
+    throw new NotImplementedException();
   }
 
   private void poll()
   {
-    while (!token.IsCancellationRequested)
+    while (!token.IsCancellationRequested && alive)
     {
-      incoming.Enqueue(get(local_mailbox, token).Result);
+      incoming.Enqueue(get(local_mailbox, token, () => alive).Result);
     }
   }
 
@@ -108,11 +115,11 @@ class SignalChannel
     return http.PostAsync(remote_mailbox, as_json(req), token);
   }
 
-  private static async Task<Request> get(string mailbox, CancellationToken token = default)
+  private static async Task<Request> get(string mailbox, CancellationToken token, Func<bool> runWhile = null)
   {
     if (string.IsNullOrEmpty(mailbox))
       throw new InvalidOperationException("null or empty mailbox");
-    while (!token.IsCancellationRequested)
+    while (!token.IsCancellationRequested && (runWhile==null || runWhile()))
     {
       try
       {

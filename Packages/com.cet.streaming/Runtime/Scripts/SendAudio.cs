@@ -63,7 +63,7 @@ public class SendAudio : MonoBehaviour
   }
 
   [ContextMenu("Make the call")]
-  private void StartCall()
+  public void StartCall()
   {
     Init();
     if (string.IsNullOrEmpty(remoteId))

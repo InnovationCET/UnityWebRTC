@@ -16,6 +16,7 @@ public class ReceiveAudio : MonoBehaviour
   [SerializeField] private AudioSource outputAudioSource;
   public string LogTag = "RecvAudio";
   public string localId;
+  public string localId2 = "unity";
 
   public bool dataChannelOpen { get; private set; }
   public event DelegateOnMessage OnMessage; // will be sent the bytes received, or null on close
@@ -23,8 +24,6 @@ public class ReceiveAudio : MonoBehaviour
   private RTCPeerConnection pc;
   private RTCDataChannel my_data_channel;
   private MediaStream receiveStream;
-  private AudioStreamTrack audioTrack;
-  private List<RTCRtpCodecCapability> availableCodecs = new List<RTCRtpCodecCapability>();
   private SignalChannel channel;
   private CancellationTokenSource listen_cts;
   private CancellationTokenSource channel_cts;
@@ -37,14 +36,6 @@ public class ReceiveAudio : MonoBehaviour
     LogTag = (string.IsNullOrWhiteSpace(LogTag) ? this.GetType().Name : LogTag.Trim()) + ": ";
     localId ??= System.Net.Dns.GetHostName();
 
-    var codecs = RTCRtpSender.GetCapabilities(TrackKind.Audio).codecs;
-    var excludeCodecTypes = new[] { "audio/CN", "audio/telephone-event" };
-    foreach (var codec in codecs)
-    {
-      if (excludeCodecTypes.Count(type => codec.mimeType.Contains(type)) > 0)
-        continue;
-      availableCodecs.Add(codec);
-    }
     listen_cts = new CancellationTokenSource();
     Task.Run(ListenAndAccept).ContinueWith(task =>
     {
@@ -182,7 +173,6 @@ public class ReceiveAudio : MonoBehaviour
   void OnHangUp()
   {
     outputAudioSource.Stop();
-    audioTrack?.Dispose();
     receiveStream?.Dispose();
     my_data_channel?.Dispose();
     pc?.Dispose();
@@ -191,7 +181,6 @@ public class ReceiveAudio : MonoBehaviour
     dataChannelOpen = false;
     OnMessage = null;
     receiveStream = null;
-    audioTrack = null;
     call_alive = false;
     Log("Hanged up call");
   }

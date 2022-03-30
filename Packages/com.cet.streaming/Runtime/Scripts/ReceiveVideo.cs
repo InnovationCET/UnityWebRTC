@@ -6,13 +6,17 @@ using System.Threading;
 using System.Threading.Tasks;
 using Unity.WebRTC;
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.UI;
 
 public class ReceiveVideo : MonoBehaviour
 {
+  [Header("Connection")]
   [SerializeField] string LogTag;
   [SerializeField] private AudioSource outputAudioSource;
   [SerializeField] private RawImage outputVideo;
+  [SerializeField] private Material alternativeOutput;
+  [SerializeField] private bool keepAlive;
   public string localId;
   public string remoteId;
 
@@ -22,13 +26,22 @@ public class ReceiveVideo : MonoBehaviour
   private SignalChannel channel;
   private CancellationTokenSource cts;
   private bool call_alive;
-  private ConcurrentQueue<Action> work = new ConcurrentQueue<Action>();
+  private ConcurrentQueue<(Action<object> callback, object cookie)> work = new ConcurrentQueue<(Action<object> callback, object cookie)>();
 
   private void Start()
   {
     LogTag = (string.IsNullOrWhiteSpace(LogTag) ? this.GetType().Name : LogTag.Trim()) + ": ";
+    cts = new CancellationTokenSource();
   }
 
+  private void OnDestroy()
+  {
+    cts.Cancel();
+  }
+
+  // stop signal channel and peer-connection on destroy
+  // keep alive once started
+  // reentrant ??
   [ContextMenu("Call")]
   public void Call()
   {
@@ -37,6 +50,8 @@ public class ReceiveVideo : MonoBehaviour
     localId ??= System.Net.Dns.GetHostName();
 
     cts = new CancellationTokenSource();
+
+    // BUG: if can't reach the signaller, or remote isn't up , gives up the call :-()
     SignalChannel.Call(remoteId, localId, cts.Token)
     .ContinueWith(task =>
     {
@@ -44,7 +59,7 @@ public class ReceiveVideo : MonoBehaviour
       {
         this.channel = task.Result;
         Log("Call was answered; signal channel established");
-        work.Enqueue(BuildPeerConnection);
+        work.Enqueue((BuildPeerConnection, this.channel));
       }
       else
       {
@@ -55,23 +70,72 @@ public class ReceiveVideo : MonoBehaviour
     });
   }
 
-  void BuildPeerConnection()
+  IEnumerator call2()
   {
+    while (true)
+    {
+      var local_channel = localId + "_" + Guid.NewGuid().ToString();
+      var www = UnityWebRequest.Post(WebRtcMain.Instance.HttpServerAddress + remoteId, JsonUtility.ToJson(new Request { type = "connect", from = local_channel }));
+      yield return www.SendWebRequest();
+      if (www.result != UnityWebRequest.Result.Success)
+      {
+        yield return new WaitForSeconds(0.5f);
+        continue;
+      }
+      while (true)
+      {
+        www = UnityWebRequest.Get(WebRtcMain.Instance.HttpServerAddress + local_channel);
+        yield return www.SendWebRequest();
+        if (www.result != UnityWebRequest.Result.Success)
+        {
+          yield return new WaitForSeconds(0.5f);
+          continue;
+        }
+        if (www.responseCode == 200) break;
+      }
+      var response = JsonUtility.FromJson<Request>(www.downloadHandler.text);
+      // if response != ok, delay and retry
+
+      BuildPeerConnection(null);
+      while (pc.ConnectionState == RTCPeerConnectionState.New || pc.ConnectionState == RTCPeerConnectionState.Connecting)
+      {
+        while (true)
+        {
+          www = UnityWebRequest.Get(WebRtcMain.Instance.HttpServerAddress + local_channel);
+          yield return www.SendWebRequest();
+          if (www.result != UnityWebRequest.Result.Success)
+          {
+            yield return new WaitForSeconds(0.5f);
+            continue;
+          }
+          if (www.responseCode == 200) break;
+        }
+        // handle msg
+      }
+      if (!keepAlive)
+        yield break; // we have no more responsibility
+
+      // else, wait until we've disconnected
+      while (pc.ConnectionState == RTCPeerConnectionState.Connected)
+      {
+        yield return null;
+      }
+    }
+  }
+
+  void BuildPeerConnection(object channel_)
+  {
+    var channel = channel_ as SignalChannel;
     var configuration = WebRtcMain.config;
     pc = new RTCPeerConnection(ref configuration)
     {
       OnIceCandidate = candidate => channel.send(new Request(candidate)),
-      OnNegotiationNeeded = () => StartCoroutine(PrepareOffer()),
+      OnNegotiationNeeded = () => StartCoroutine(PrepareOffer(channel)),
       OnIceGatheringStateChange = state => Log("Ice gathering state " + state),
       OnIceConnectionChange = state => Log("Ice connection change " + state),
       OnConnectionStateChange = state =>
       {
         Log("Connection state change " + state);
-        if (state == RTCPeerConnectionState.Connected)
-        {
-          cts.Cancel(); // no need for signal channel anymore
-          cts = null;
-        }
         if (state == RTCPeerConnectionState.Failed ||
             state == RTCPeerConnectionState.Closed ||
             state == RTCPeerConnectionState.Disconnected)
@@ -84,7 +148,11 @@ public class ReceiveVideo : MonoBehaviour
       Log("received track " + e.Track.Kind);
       if (e.Track is VideoStreamTrack video)
       {
-        video.OnVideoReceived += tex => outputVideo.texture = tex;
+        video.OnVideoReceived += tex =>
+        {
+          if (outputVideo != null) outputVideo.texture = tex;
+          if (alternativeOutput != null) alternativeOutput.mainTexture = tex;
+        };
       }
       if (e.Track is AudioStreamTrack audio)
       {
@@ -105,7 +173,7 @@ public class ReceiveVideo : MonoBehaviour
     pc.OnTrack = e => receiveStream.AddTrack(e.Track); ;
   }
 
-  private IEnumerator PrepareOffer()
+  private IEnumerator PrepareOffer(SignalChannel channel)
   {
     var op1 = pc.CreateOffer();
     yield return op1;
@@ -118,6 +186,7 @@ public class ReceiveVideo : MonoBehaviour
     pc.SetLocalDescription(ref desc);
     Log("created the offer and set it as local. now sending it...");
     channel.send(desc);
+    //UnityWebRequest.Post(remote, JsonUtility.ToJson(new Request(desc)));
   }
 
   private IEnumerator OnAnswer(RTCSessionDescription desc)
@@ -155,10 +224,12 @@ public class ReceiveVideo : MonoBehaviour
   private void Update()
   {
     while (work.TryDequeue(out var job))
-      job();
+      job.callback(job.cookie);
 
     while (pc != null && channel && channel.TryGet(out var msg))
     {
+      if (msg == null)
+        break; // end of connection - should hang up and make another call
       if (msg.type == "answer")
       {
         print("received answer");
@@ -175,7 +246,14 @@ public class ReceiveVideo : MonoBehaviour
       }
       // else, unknown msg
     }
+    if (pc != null && keepAlive &&
+            (pc.ConnectionState == RTCPeerConnectionState.Failed ||
+            pc.ConnectionState == RTCPeerConnectionState.Disconnected))
+    {
+      Call();
+    }
   }
+
   void Log(string msg)
   {
     Debug.Log(LogTag + msg);
