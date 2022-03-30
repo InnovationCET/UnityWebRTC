@@ -79,12 +79,12 @@ public class SendAudio2 : BaseForRtcConnection
 
   protected override IEnumerator InitiateConnection()
   {
+    Log("InitiateConnection");
     WebRtcMain.Instance.InitIfNeeded();
     if (string.IsNullOrEmpty(localId))
       localId = System.Net.Dns.GetHostName();
 
-    Hangup(pc); // hang up previous first
-    pc = null;
+    Hangup(); // hang up previous first
 
     bool first = true;
     IMsg www = null;
@@ -130,11 +130,10 @@ public class SendAudio2 : BaseForRtcConnection
         pc.AddIceCandidate((RTCIceCandidate)www.answer);
       }
     }
-    Log(pc.ConnectionState.ToString());
-    Log("--------------------------------------------");
     if (keepAlive)
       pc.OnConnectionStateChange += newstate =>
       {
+        Log("----------------------- " + newstate);
         switch (newstate)
         {
           case RTCPeerConnectionState.Disconnected:
@@ -163,5 +162,12 @@ public class SendAudio2 : BaseForRtcConnection
     inputAudioSource.loop = true;
     inputAudioSource.clip = clipInput;
     inputAudioSource.Play();
+  }
+
+  [ContextMenu("Hang up")]
+  protected override void Hangup()
+  {
+    inputAudioSource.Stop();
+    base.Hangup();
   }
 }

@@ -12,6 +12,11 @@ public class VideoAudioReceiver : BaseForRtcConnection
   [SerializeField] private RawImage outputVideo;
   [SerializeField] private Material alternativeOutput;
 
+  private bool PcFailedState =>
+      pc.ConnectionState == RTCPeerConnectionState.Disconnected ||
+      pc.ConnectionState == RTCPeerConnectionState.Failed ||
+      pc.ConnectionState == RTCPeerConnectionState.Closed;
+
   public void Send(byte[] buffer)
   {
     data_channel?.Send(buffer);
@@ -28,8 +33,9 @@ public class VideoAudioReceiver : BaseForRtcConnection
     if (string.IsNullOrEmpty(localId))
       localId = System.Net.Dns.GetHostName();
 
-    Hangup(pc); // hang up previous first
-    pc = null;
+    while (pc != null && !PcFailedState)
+      yield return null;
+    Hangup(); // hang up previous first
 
     var local = localId + "_" + Guid.NewGuid().ToString();
     bool first = true;
@@ -44,7 +50,7 @@ public class VideoAudioReceiver : BaseForRtcConnection
 
       // extend an invitation to the remote peer
       yield return (www = new put(remoteId, new Request { type = "connect", from = local }));
-      if (!www.IsOk) 
+      if (!www.IsOk)
         continue; // signal-server not available
       yield return (www = new get(local));
       if (!www.IsOk || www.answer?.type != "ok")
@@ -52,9 +58,23 @@ public class VideoAudioReceiver : BaseForRtcConnection
       new_remoteId = www.answer.switch_channel;
     }
 
+    if(pc!=null)
+      yield break;
     // at this point we have a remote that's ready to talk to us
     Log("Switched channel to " + new_remoteId);
     BuildPeerConnection(new_remoteId);
+    if (keepAlive)
+      pc.OnConnectionStateChange += newstate =>
+      {
+        switch (newstate)
+        {
+          case RTCPeerConnectionState.Closed:
+          case RTCPeerConnectionState.Disconnected:
+          case RTCPeerConnectionState.Failed:
+            StartCoroutine(InitiateConnection());
+            break;
+        }
+      };
     while (www.IsOk && pc.ConnectionState != RTCPeerConnectionState.Connected)
     {
       yield return (www = new get(local));
@@ -73,9 +93,7 @@ public class VideoAudioReceiver : BaseForRtcConnection
         pc.AddIceCandidate((RTCIceCandidate)www.answer);
       }
     }
-
-    if (keepAlive)
-      pc.OnConnectionStateChange += newstate => StartCoroutine(InitiateConnection());
+    print("*******************");
   }
 
   IEnumerator PrepareOffer(RTCPeerConnection pc, string remoteUrl)
@@ -140,12 +158,11 @@ public class VideoAudioReceiver : BaseForRtcConnection
   }
 
   [ContextMenu("Hang up")]
-  protected override void Hangup(RTCPeerConnection pc_)
+  protected override void Hangup()
   {
-    base.Hangup(this.pc);
+    base.Hangup();
     outputAudioSource.Stop();
     // erase the texture? disable the RawImage?
-    this.pc = null;
   }
 
   [ContextMenu("Call")]

@@ -8,6 +8,7 @@ using UnityEngine.Networking;
 public abstract class BaseForRtcConnection : MonoBehaviour
 {
   [SerializeField] protected string LogTag;
+  [SerializeField] protected bool printLogs;
   [SerializeField] protected bool keepAlive;
   [SerializeField] protected bool connectOnStart;
   [SerializeField] protected string localId;
@@ -36,12 +37,12 @@ public abstract class BaseForRtcConnection : MonoBehaviour
   {
     try
     {
-      Hangup(pc);
+      Hangup();
     }
     catch { }
   }
 
-  protected virtual void Hangup(RTCPeerConnection pc)
+  protected virtual void Hangup()
   {
     if (pc != null)
     {
@@ -60,12 +61,14 @@ public abstract class BaseForRtcConnection : MonoBehaviour
         sender.Dispose();
       }
       pc.Close();
+      pc = null;
     }
   }
 
   protected void Log(string msg)
   {
-    Debug.Log(LogTag + msg);
+    if(printLogs)
+      Debug.Log(LogTag + msg);
   }
 
   MediaStream receiveStream;
@@ -90,8 +93,7 @@ public abstract class BaseForRtcConnection : MonoBehaviour
             state == RTCPeerConnectionState.Closed ||
             state == RTCPeerConnectionState.Disconnected)
         {
-          Hangup(pc);
-          pc = null;
+          Hangup();
         }
       },
       OnDataChannel = SetupDataChannel
@@ -101,6 +103,7 @@ public abstract class BaseForRtcConnection : MonoBehaviour
 
   protected void SetupDataChannel(RTCDataChannel channel)
   {
+    Log("opened data channel");
     this.data_channel = channel;
     this.data_channel.OnOpen = () => dataChannelOpen = true;
     this.data_channel.OnClose = () =>
@@ -136,6 +139,7 @@ public abstract class BaseForRtcConnection : MonoBehaviour
     public void Dispose()
     {
       www?.Dispose();
+      www = null;
     }
   }
 
@@ -144,29 +148,47 @@ public abstract class BaseForRtcConnection : MonoBehaviour
     private UnityWebRequest www;
     private DateTime deadline;
     private Request msg;
+
+    public UnityWebRequest.Result Result { get; private set; }
+    public bool IsOk { get; private set; }
+    public Request answer { get; private set; }
+
     public get(string id, float timeoutSeconds = 3)
     {
       var url = WebRtcMain.Instance.HttpServerAddress + id;
       www = UnityWebRequest.Get(url);
       www.SendWebRequest();
+      Result = www.result;
+      IsOk = false;
       deadline = DateTime.Now + TimeSpan.FromSeconds(timeoutSeconds);
     }
-    public UnityWebRequest.Result Result => www.result;
-    public bool IsOk => www.result == UnityWebRequest.Result.Success;
-    public Request answer => msg ?? (IsOk ? (msg = JsonUtility.FromJson<Request>(www.downloadHandler.text)) : null);
     public override bool keepWaiting
     {
       get
       {
-        if (www.result == UnityWebRequest.Result.Success)
-          return false;
-        if (www.result == UnityWebRequest.Result.InProgress) 
-          return true;
-        if (DateTime.Now < deadline)
+        if (www == null) return false;
+        Result = www.result;
+        if (Result == UnityWebRequest.Result.InProgress)
         {
-          www = UnityWebRequest.Get(www.url);
-          www.SendWebRequest();
           return true;
+        }
+        else if (Result == UnityWebRequest.Result.Success)
+        {
+          IsOk = true;
+          answer = JsonUtility.FromJson<Request>(www.downloadHandler.text);
+          Dispose();
+          return false;
+        }
+        else
+        {
+          if (DateTime.Now < deadline)
+          {
+            var url = www.url;
+            Dispose();
+            www = UnityWebRequest.Get(url);
+            www.SendWebRequest();
+            return true;
+          }
         }
         return false;
       }
@@ -175,6 +197,7 @@ public abstract class BaseForRtcConnection : MonoBehaviour
     public void Dispose()
     {
       www?.Dispose();
+      www = null;
     }
   }
   #endregion

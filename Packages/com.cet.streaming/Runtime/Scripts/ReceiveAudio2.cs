@@ -31,30 +31,30 @@ public class ReceiveAudio2 : BaseForRtcConnection
   protected override IEnumerator InitiateConnection()
   {
     IMsg www = null;
-    Log("Listening to incoming connections for audio...");
-
     // remove old requests for this machine
-    using (var del = UnityWebRequest.Delete(localId))
-      yield return del.SendWebRequest();
+    // using (var del = UnityWebRequest.Delete(localId))
+    //   yield return del.SendWebRequest();
 
     while (true)
     {
+      Log("Listening to incoming connections for audio...");
       do
         yield return www = new get(localId);
       while (www.IsOk == false);
       var new_local_channel = localId + "_" + Guid.NewGuid().ToString();
       var remote = www.answer.from;
-      Log($"Accepted connection from {remote}, sending response now...");
+      Log($"Accepted connection request from {remote}, sending response now...");
       yield return (www = new put(remote, new Request { type = "ok", switch_channel = new_local_channel }));
-      Log("Sent the response: " + www.Result);
       if (www.IsOk)
       {
-        Log($"ReceiveAudio2 is switching to {new_local_channel}");
+        Log($"switching to channel {new_local_channel}");
         var accepter = StartCoroutine(Accept(new_local_channel, remote));
-        yield return new WaitForSeconds(15);
-        // don't accept 2 concurrent connections
+        var deadline = Time.time + 60;
+        while (Time.time < deadline && pc == null || pc.ConnectionState != RTCPeerConnectionState.Connected)
+          yield return new WaitForSeconds(1);
+        StopCoroutine(accepter); // If after 60 seconds we don't have a connection, we stop
+        // in case we do have a connection, wait here
         yield return new WaitUntil(() => pc == null || pc.ConnectionState != RTCPeerConnectionState.Connected);
-        StopCoroutine(accepter); // in case we're still listening, with no connection in sight, stop
       }
     }
   }
@@ -69,8 +69,7 @@ public class ReceiveAudio2 : BaseForRtcConnection
       if (www.IsOk == false)
       {
         Log("No messages from remote for 10 seconds; aborting");
-        Hangup(pc);
-        pc = null;
+        Hangup();
         yield break;
       }
       if (www.answer?.type == "offer" && pc == null)
@@ -100,8 +99,6 @@ public class ReceiveAudio2 : BaseForRtcConnection
         }
       }
     }
-    if (pc != null)
-      Log(pc.ConnectionState.ToString());
   }
 
   protected override void BuildPeerConnection(string remote)
@@ -135,10 +132,10 @@ public class ReceiveAudio2 : BaseForRtcConnection
     yield return new put(remote, new Request(answer_sdp));
   }
 
-  protected override void Hangup(RTCPeerConnection pc)
+  [ContextMenu("Hangup")]
+  protected override void Hangup()
   {
     outputAudioSource.Stop();
-    base.Hangup(pc);
-    pc = null;
+    base.Hangup();
   }
 }
