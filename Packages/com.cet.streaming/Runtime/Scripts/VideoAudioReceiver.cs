@@ -17,16 +17,6 @@ public class VideoAudioReceiver : BaseForRtcConnection
       pc.ConnectionState == RTCPeerConnectionState.Failed ||
       pc.ConnectionState == RTCPeerConnectionState.Closed;
 
-  public void Send(byte[] buffer)
-  {
-    data_channel?.Send(buffer);
-  }
-
-  public void Send(string text)
-  {
-    data_channel?.Send(text);
-  }
-
   protected override IEnumerator InitiateConnection()
   {
     WebRtcMain.Instance.InitIfNeeded();

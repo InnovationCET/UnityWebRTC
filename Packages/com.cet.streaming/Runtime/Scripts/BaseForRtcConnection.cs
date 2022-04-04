@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using Unity.WebRTC;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -108,6 +107,9 @@ public abstract class BaseForRtcConnection : MonoBehaviour
     this.data_channel.OnMessage = onMessage;
   }
 
+  public void Send(string msg) => this.data_channel?.Send(msg);
+  public void Send(byte[] msg) => this.data_channel?.Send(msg);
+
   #region network connection
   protected interface IMsg
   {
@@ -125,10 +127,33 @@ public abstract class BaseForRtcConnection : MonoBehaviour
       www = UnityWebRequest.Put(url, JsonUtility.ToJson(data));
       www.SendWebRequest();
     }
-    public UnityWebRequest.Result Result => www.result;
+    
+    public UnityWebRequest.Result Result { get; private set; }
     public Request answer => null;
-    public bool IsOk => www.result == UnityWebRequest.Result.Success;
-    public override bool keepWaiting => www.result == UnityWebRequest.Result.InProgress;
+    public bool IsOk { get; private set; }
+    public override bool keepWaiting
+    {
+      get
+      {
+        if (www == null) return false;
+        Result = www.result;
+        if (Result == UnityWebRequest.Result.InProgress)
+        {
+          return true;
+        }
+        else if (Result == UnityWebRequest.Result.Success)
+        {
+          IsOk = true;
+          Dispose();
+          return false;
+        }
+        else
+        {
+          Dispose();
+        }
+        return false;
+      }
+    }
 
     public void Dispose()
     {

@@ -18,22 +18,12 @@ public class ReceiveAudio2 : BaseForRtcConnection
     outputAudioSource.Play();
   }
 
-  public void Send(byte[] buffer)
-  {
-    data_channel?.Send(buffer);
-  }
-
-  public void Send(string text)
-  {
-    data_channel?.Send(text);
-  }
-
   protected override IEnumerator InitiateConnection()
   {
+    WebRtcMain.Instance.InitIfNeeded();
+    if (string.IsNullOrEmpty(localId))
+      localId = System.Net.Dns.GetHostName();
     IMsg www = null;
-    // remove old requests for this machine
-    // using (var del = UnityWebRequest.Delete(localId))
-    //   yield return del.SendWebRequest();
 
     while (true)
     {
