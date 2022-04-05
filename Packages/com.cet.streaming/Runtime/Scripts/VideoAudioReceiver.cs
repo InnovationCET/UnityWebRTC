@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using Unity.WebRTC;
 using UnityEngine;
 using UnityEngine.UI;
@@ -17,17 +16,21 @@ public class VideoAudioReceiver : BaseForRtcConnection
       pc.ConnectionState == RTCPeerConnectionState.Failed ||
       pc.ConnectionState == RTCPeerConnectionState.Closed;
 
+  private DateTime disconnectTime = DateTime.MinValue;
+
   protected override IEnumerator InitiateConnection()
   {
     WebRtcMain.Instance.InitIfNeeded();
     if (string.IsNullOrEmpty(localId))
       localId = System.Net.Dns.GetHostName();
 
-    while (pc != null && pc.ConnectionState != RTCPeerConnectionState.Closed)
+    if (pc != null && pc.ConnectionState != RTCPeerConnectionState.Closed)
     {
       Log("Previous connection is still alive");
       yield break;
     }
+    if ((DateTime.Now - disconnectTime).TotalSeconds < 1)
+      yield return new WaitForSeconds(1);
 
     var local = localId + "_" + Guid.NewGuid().ToString();
     bool first = true;
@@ -54,13 +57,15 @@ public class VideoAudioReceiver : BaseForRtcConnection
       yield break;
     // at this point we have a remote that's ready to talk to us
     Log("Switched channel to " + new_remoteId);
+
     BuildPeerConnection(new_remoteId);
+
     pc.OnConnectionStateChange += newstate =>
     {
-      if (newstate == RTCPeerConnectionState.Closed && keepAlive)
-        StartCoroutine(InitiateConnection());
-      if (newstate == RTCPeerConnectionState.Failed)
+      if (newstate == RTCPeerConnectionState.Closed)
+      {
         Hangup();
+      }
     };
     while (www.IsOk && pc.ConnectionState != RTCPeerConnectionState.Connected)
     {
@@ -147,9 +152,12 @@ public class VideoAudioReceiver : BaseForRtcConnection
   [ContextMenu("Hang up")]
   protected override void Hangup()
   {
-    base.Hangup();
+    var was_connected = pc != null && pc.ConnectionState == RTCPeerConnectionState.Connected;
     outputAudioSource.Stop();
-    // erase the texture? disable the RawImage?
+    base.Hangup();
+    disconnectTime = DateTime.Now;
+    if (was_connected && keepAlive)
+      StartCoroutine(InitiateConnection());
   }
 
   [ContextMenu("Call")]

@@ -46,13 +46,19 @@ public abstract class BaseForRtcConnection : MonoBehaviour
     if (pc != null)
     {
       Log("Hanging up");
+      
       foreach (var recv in pc.GetReceivers())
       {
         foreach (var m in recv.Streams)
           foreach (var track in m.GetTracks())
+          {
             track.Stop();
+            track.Dispose();
+          }
         recv.Dispose();
       }
+      receiveStream.Dispose();
+      receiveStream = null;
       foreach (var sender in pc.GetSenders())
       {
         if (sender.Track != null)
@@ -60,17 +66,18 @@ public abstract class BaseForRtcConnection : MonoBehaviour
         sender.Dispose();
       }
       pc.Close();
+      pc.Dispose();
       pc = null;
     }
   }
 
   protected void Log(string msg)
   {
-    if(printLogs)
+    if (printLogs)
       Debug.Log(LogTag + msg);
   }
 
-  MediaStream receiveStream;
+  protected MediaStream receiveStream;
   protected RTCPeerConnection BuildBasicPeerConnection(string remote)
   {
     RTCPeerConnection pc = null;
@@ -127,7 +134,7 @@ public abstract class BaseForRtcConnection : MonoBehaviour
       www = UnityWebRequest.Put(url, JsonUtility.ToJson(data));
       www.SendWebRequest();
     }
-    
+
     public UnityWebRequest.Result Result { get; private set; }
     public Request answer => null;
     public bool IsOk { get; private set; }

@@ -14,6 +14,8 @@ public class SendAudio2 : BaseForRtcConnection
   int m_samplingFrequency = 48000;
   int m_lengthSeconds = 1;
 
+  private DateTime disconnectTime = DateTime.MinValue;
+
   protected override void Start()
   {
     //ListMicrophones();
@@ -84,7 +86,14 @@ public class SendAudio2 : BaseForRtcConnection
     if (string.IsNullOrEmpty(localId))
       localId = System.Net.Dns.GetHostName();
 
-    Hangup(); // hang up previous first
+    if (pc != null && pc.ConnectionState != RTCPeerConnectionState.Closed)
+    {
+      Log("Previous connection is still alive");
+      yield break;
+    }
+    //Hangup(); // hang up previous first
+    if ((DateTime.Now - disconnectTime).TotalSeconds < 1)
+      yield return new WaitForSeconds(1);
 
     bool first = true;
     IMsg www = null;
@@ -132,9 +141,7 @@ public class SendAudio2 : BaseForRtcConnection
     }
     pc.OnConnectionStateChange += newstate =>
     {
-      if (newstate == RTCPeerConnectionState.Closed && keepAlive)
-        StartCoroutine(InitiateConnection());
-      if (newstate == RTCPeerConnectionState.Failed)
+      if (newstate == RTCPeerConnectionState.Closed)
         Hangup();
     };
   }
@@ -159,7 +166,11 @@ public class SendAudio2 : BaseForRtcConnection
   [ContextMenu("Hang up")]
   protected override void Hangup()
   {
+    var was_connected = pc != null && pc.ConnectionState == RTCPeerConnectionState.Connected;
     inputAudioSource.Stop();
     base.Hangup();
+    disconnectTime = DateTime.Now;
+    if (was_connected && keepAlive)
+      StartCoroutine(InitiateConnection());
   }
 }
