@@ -5,6 +5,7 @@ using Unity.WebRTC;
 public class Request : EventArgs
 {
   public string type;
+  public long timestamp;
   public string from;
   public string switch_channel;
 
@@ -18,16 +19,19 @@ public class Request : EventArgs
   public string id;
   public int label;
 
-  public Request() { }
+  public Request()
+  {
+    timestamp = new DateTimeOffset(DateTime.Now).ToUnixTimeSeconds();
+  }
 
-  public Request(RTCIceCandidate c)
+  public Request(RTCIceCandidate c) : base()
   {
     type = "candidate";
     candidate = c.Candidate;
     id = SdpMid = c.SdpMid;
     label = SdpMLineIndex = c.SdpMLineIndex ?? 0;
   }
-  public Request(RTCSessionDescription desc)
+  public Request(RTCSessionDescription desc) : base()
   {
     type = desc.type.ToString().ToLower();
     sdp = desc.sdp;
