@@ -15,6 +15,7 @@ public class SendAudio2 : BaseForRtcConnection
   int m_lengthSeconds = 1;
 
   private DateTime disconnectTime = DateTime.MinValue;
+  private bool connected;
 
   protected override void Start()
   {
@@ -139,9 +140,10 @@ public class SendAudio2 : BaseForRtcConnection
         pc.AddIceCandidate((RTCIceCandidate)www.answer);
       }
     }
+    connected = pc.ConnectionState == RTCPeerConnectionState.Connected;
     pc.OnConnectionStateChange += newstate =>
     {
-      if (newstate == RTCPeerConnectionState.Closed)
+      if (newstate == RTCPeerConnectionState.Closed || newstate == RTCPeerConnectionState.Failed)
         Hangup();
     };
   }
@@ -166,10 +168,11 @@ public class SendAudio2 : BaseForRtcConnection
   [ContextMenu("Hang up")]
   protected override void Hangup()
   {
-    var was_connected = pc != null && pc.ConnectionState == RTCPeerConnectionState.Connected;
+    bool was_connected = connected;
     inputAudioSource.Stop();
     base.Hangup();
     disconnectTime = DateTime.Now;
+    connected = false;
     if (was_connected && keepAlive)
       StartCoroutine(InitiateConnection());
   }

@@ -17,6 +17,7 @@ public class VideoAudioReceiver : BaseForRtcConnection
       pc.ConnectionState == RTCPeerConnectionState.Closed;
 
   private DateTime disconnectTime = DateTime.MinValue;
+  private bool connected;
 
   protected override IEnumerator InitiateConnection()
   {
@@ -62,7 +63,7 @@ public class VideoAudioReceiver : BaseForRtcConnection
 
     pc.OnConnectionStateChange += newstate =>
     {
-      if (newstate == RTCPeerConnectionState.Closed)
+      if (newstate == RTCPeerConnectionState.Closed || newstate == RTCPeerConnectionState.Failed)
       {
         Hangup();
       }
@@ -85,6 +86,7 @@ public class VideoAudioReceiver : BaseForRtcConnection
         pc.AddIceCandidate((RTCIceCandidate)www.answer);
       }
     }
+    connected = pc.ConnectionState == RTCPeerConnectionState.Connected;
     print("*******************");
   }
 
@@ -152,10 +154,11 @@ public class VideoAudioReceiver : BaseForRtcConnection
   [ContextMenu("Hang up")]
   protected override void Hangup()
   {
-    var was_connected = pc != null && pc.ConnectionState == RTCPeerConnectionState.Connected;
+    bool was_connected = connected;
     outputAudioSource.Stop();
     base.Hangup();
     disconnectTime = DateTime.Now;
+    connected = false;
     if (was_connected && keepAlive)
       StartCoroutine(InitiateConnection());
   }
